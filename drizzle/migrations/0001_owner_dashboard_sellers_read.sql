@@ -1,0 +1,2 @@
+GRANT SELECT ON public.organizers TO authenticated;
+CREATE POLICY "organizers admin read" ON public.organizers FOR SELECT TO authenticated USING (auth_utils.has_role(auth.uid(), 'admin'::public.app_role));

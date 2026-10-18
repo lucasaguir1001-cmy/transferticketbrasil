@@ -1,0 +1,1 @@
+UPDATE public.events SET image_url = '/__l5e/assets-v1/b21435d7-823b-42fc-a68d-8184f35c1d6c/iron-maiden-1920x1080.png' WHERE title ILIKE '%Iron Maiden%';

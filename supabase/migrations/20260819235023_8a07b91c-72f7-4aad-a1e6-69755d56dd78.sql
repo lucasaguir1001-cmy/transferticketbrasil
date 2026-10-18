@@ -1,0 +1,1 @@
+UPDATE public.events SET image_url = '/__l5e/assets-v1/cbace712-8849-4016-9d0a-5b6e3195a6c3/f1-new-banner-v3.png' WHERE title ILIKE '%Fórmula 1%' OR title ILIKE '%GP São Paulo%';

@@ -1,0 +1,1 @@
+UPDATE public.events SET image_url = 'https://access-ace-finder.lovable.app/__l5e/assets-v1/d9e1e659-aecc-45b0-a57b-845d3391dfe8/iron-maiden-tour-2026.png' WHERE title ILIKE '%Iron Maiden%';

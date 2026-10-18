@@ -1,0 +1,1 @@
+GRANT USAGE ON SCHEMA private TO authenticated, service_role;

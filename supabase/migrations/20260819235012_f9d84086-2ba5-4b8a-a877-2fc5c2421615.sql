@@ -1,0 +1,3 @@
+UPDATE public.events SET image_url = '/__l5e/assets-v1/090d6582-9bf7-47f1-a46e-5d3b1594a247/bts-banner-v3.png' WHERE title ILIKE '%BTS%';
+UPDATE public.events SET image_url = '/__l5e/assets-v1/1f735984-97bc-4a65-af5e-16538245b082/iron-maiden-new-banner-v2.png' WHERE title ILIKE '%Iron Maiden%';
+UPDATE public.events SET image_url = '/__l5e/assets-v1/524314c6-4e0a-4a27-be0d-85f439c3a305/f1-new-banner-v3.png' WHERE title ILIKE '%Fórmula 1%' OR title ILIKE '%GP São Paulo%';

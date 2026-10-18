@@ -1,0 +1,1 @@
+UPDATE public.events SET image_url = 'https://b13507ba-683c-4600-b47b-060b76660927.lovableproject.com/__l5e/assets-v1/49a4e3b3-8765-4312-9210-3452351203e6/f1-cover-4-3.png' WHERE title ILIKE '%Formula 1%' OR title ILIKE '%GP São Paulo%' OR title ILIKE '%Grande Prêmio%';

@@ -1,0 +1,1 @@
+UPDATE public.organizers SET name = 'Move Concerts Brasil' WHERE id = '2bf78b5c-bd70-401c-bf7b-0b2f1fb8c8c4';

@@ -1,0 +1,1 @@
+ALTER POLICY "Public can read event images" ON storage.objects TO authenticated USING (bucket_id = 'event-images' AND owner_id = (SELECT auth.uid()::text));

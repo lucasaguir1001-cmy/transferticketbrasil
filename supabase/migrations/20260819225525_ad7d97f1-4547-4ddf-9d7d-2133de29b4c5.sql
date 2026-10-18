@@ -1,0 +1,1 @@
+UPDATE public.events SET image_url = 'https://access-ace-finder.lovable.app/__l5e/assets-v1/099307c0-a548-4e1b-b461-460773e72151/f1-new-banner-v2.png' WHERE title ILIKE '%Grande Prêmio de São Paulo%' OR title ILIKE '%GP São Paulo%';
