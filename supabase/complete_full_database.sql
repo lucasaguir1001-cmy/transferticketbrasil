@@ -1,20 +1,20 @@
 -- ==============================================================================
 -- TRANSFER TICKET BRASIL - SCRIPT UNIFICADO COMPLETO DEFINITIVO (SUPABASE)
 -- ==============================================================================
--- Este script limpa com segurança tabelas conflitantes anteriores e recria
--- toda a estrutura completa do banco de dados + catálogo completo de eventos:
---
--- 1. Limpeza segura das tabelas do projeto (sem afetar auth.users)
--- 2. Enums com suporte completo a 'syncpay'
--- 3. Schema 'private' e função 'has_role'
--- 4. Tabelas: profiles, user_roles, organizers, events, ticket_tiers, coupons, orders, order_items, tickets
--- 5. View pública: organizers_public
--- 6. Triggers de atualização e criação de perfil
+-- ORDEM ESTRUTURADA DE EXECUÇÃO:
+-- 1. Limpeza segura das tabelas e views antigas (CASCADE)
+-- 2. Criação dos tipos ENUM (com 'syncpay' incluído)
+-- 3. Criação de TODAS as tabelas do sistema
+-- 4. Criação das funções (has_role, handle_new_user, set_updated_at, etc.)
+-- 5. Criação da view organizers_public
+-- 6. Definição de permissões (GRANTs)
 -- 7. Políticas de Row Level Security (RLS)
--- 8. Carga completa dos eventos (BTS, Iron Maiden, Ed Sheeran, F1, Samba, Tech Summit, etc.)
+-- 8. Triggers automáticos
+-- 9. Índices de performance
+-- 10. Carga completa de organizadores, eventos e lotes (BTS, Iron Maiden, Ed Sheeran, F1, etc.)
 -- ==============================================================================
 
--- 1. LIMPEZA SEGURA DE TABELAS E VIEWS ANTERIORES
+-- 1. LIMPEZA SEGURA DE TABELAS E VIEWS
 DROP VIEW IF EXISTS public.organizers_public CASCADE;
 DROP TABLE IF EXISTS public.tickets CASCADE;
 DROP TABLE IF EXISTS public.order_items CASCADE;
@@ -26,7 +26,7 @@ DROP TABLE IF EXISTS public.organizers CASCADE;
 DROP TABLE IF EXISTS public.user_roles CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
 
--- 2. ENUMS
+-- 2. TIPOS ENUM
 DO $$ BEGIN
   CREATE TYPE public.app_role AS ENUM ('admin', 'organizer', 'user');
 EXCEPTION WHEN duplicate_object THEN null;
@@ -68,42 +68,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
--- 3. SCHEMA PRIVATE & AUTORIZAÇÃO
+-- 3. SCHEMA PRIVATE
 CREATE SCHEMA IF NOT EXISTS private;
 GRANT USAGE ON SCHEMA private TO anon, authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION private.has_role(_user_id uuid, _role public.app_role)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-  SELECT _user_id IS NOT NULL
-     AND _user_id = auth.uid()
-     AND EXISTS (
-       SELECT 1 FROM public.user_roles ur
-       WHERE ur.user_id = _user_id AND ur.role = _role
-     );
-$function$;
-
-REVOKE ALL ON FUNCTION private.has_role(uuid, public.app_role) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION private.has_role(uuid, public.app_role) TO authenticated, service_role;
-
--- 4. FUNÇÃO AUXILIAR DE TIMESTAMP
-CREATE OR REPLACE FUNCTION public.set_updated_at()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
--- 5. CRIAÇÃO DAS TABELAS
--- Profiles
+-- 4. CRIAÇÃO DE TODAS AS TABELAS (Antes das funções e policies que as referenciam)
 CREATE TABLE public.profiles (
   id UUID NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
@@ -113,7 +82,6 @@ CREATE TABLE public.profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- User Roles
 CREATE TABLE public.user_roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -122,7 +90,6 @@ CREATE TABLE public.user_roles (
   UNIQUE(user_id, role)
 );
 
--- Organizers
 CREATE TABLE public.organizers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -134,7 +101,6 @@ CREATE TABLE public.organizers (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Events
 CREATE TABLE public.events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organizer_id UUID NOT NULL REFERENCES public.organizers(id) ON DELETE CASCADE,
@@ -156,7 +122,6 @@ CREATE TABLE public.events (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Ticket Tiers
 CREATE TABLE public.ticket_tiers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
@@ -171,7 +136,6 @@ CREATE TABLE public.ticket_tiers (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Coupons
 CREATE TABLE public.coupons (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
@@ -187,7 +151,6 @@ CREATE TABLE public.coupons (
   UNIQUE (event_id, code)
 );
 
--- Orders
 CREATE TABLE public.orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -208,7 +171,6 @@ CREATE TABLE public.orders (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Order Items
 CREATE TABLE public.order_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
@@ -219,7 +181,6 @@ CREATE TABLE public.order_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Tickets
 CREATE TABLE public.tickets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
@@ -232,6 +193,71 @@ CREATE TABLE public.tickets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 5. FUNÇÕES DO SISTEMA (Agora que user_roles e profiles existem)
+CREATE OR REPLACE FUNCTION private.has_role(_user_id uuid, _role public.app_role)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  RETURN _user_id IS NOT NULL
+     AND _user_id = auth.uid()
+     AND EXISTS (
+       SELECT 1 FROM public.user_roles ur
+       WHERE ur.user_id = _user_id AND ur.role = _role
+     );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.has_role(uuid, public.app_role) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.has_role(uuid, public.app_role) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, avatar_url)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    NEW.raw_user_meta_data->>'avatar_url'
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    avatar_url = EXCLUDED.avatar_url,
+    updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user_role()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'user') ON CONFLICT DO NOTHING;
+  RETURN NEW;
+END;
+$$;
 
 -- 6. VIEW PÚBLICA ORGANIZERS_PUBLIC
 CREATE OR REPLACE VIEW public.organizers_public AS
@@ -286,24 +312,20 @@ ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY;
 
--- Profiles Policies
 CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT TO authenticated USING (auth.uid() = id);
 CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 
--- User Roles Policies
 CREATE POLICY "users view own roles" ON public.user_roles FOR SELECT TO authenticated USING (auth.uid() = user_id);
 CREATE POLICY "admins manage roles" ON public.user_roles FOR ALL TO authenticated
   USING (private.has_role(auth.uid(), 'admin'::public.app_role))
   WITH CHECK (private.has_role(auth.uid(), 'admin'::public.app_role));
 
--- Organizers Policies
 CREATE POLICY "organizers owner read" ON public.organizers FOR SELECT TO authenticated USING (auth.uid() = user_id);
 CREATE POLICY "organizers owner insert" ON public.organizers FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "organizers owner update" ON public.organizers FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "organizers owner delete" ON public.organizers FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
--- Events Policies
 CREATE POLICY "events public read published" ON public.events FOR SELECT USING (status = 'published');
 CREATE POLICY "events owner read all" ON public.events FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.organizers o WHERE o.id = organizer_id AND o.user_id = auth.uid()));
@@ -317,19 +339,16 @@ CREATE POLICY "events admin all" ON public.events FOR ALL TO authenticated
   USING (private.has_role(auth.uid(), 'admin'::public.app_role))
   WITH CHECK (private.has_role(auth.uid(), 'admin'::public.app_role));
 
--- Ticket Tiers Policies
 CREATE POLICY "tiers public read" ON public.ticket_tiers FOR SELECT TO anon, authenticated
   USING (EXISTS (SELECT 1 FROM public.events e WHERE e.id = ticket_tiers.event_id AND e.status = 'published'::public.event_status));
 CREATE POLICY "tiers owner all" ON public.ticket_tiers FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = event_id AND o.user_id = auth.uid()))
   WITH CHECK (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = event_id AND o.user_id = auth.uid()));
 
--- Coupons Policies
 CREATE POLICY "Organizers manage own coupons" ON public.coupons FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = coupons.event_id AND o.user_id = auth.uid()))
   WITH CHECK (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = coupons.event_id AND o.user_id = auth.uid()));
 
--- Orders Policies
 CREATE POLICY "orders owner read" ON public.orders FOR SELECT TO authenticated USING (auth.uid() = user_id);
 CREATE POLICY "orders owner insert" ON public.orders FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "orders admin all" ON public.orders FOR ALL TO authenticated
@@ -338,13 +357,11 @@ CREATE POLICY "orders admin all" ON public.orders FOR ALL TO authenticated
 CREATE POLICY "orders organizer read" ON public.orders FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.tickets t JOIN public.events e ON e.id = t.event_id JOIN public.organizers o ON o.id = e.organizer_id WHERE t.order_id = orders.id AND o.user_id = auth.uid()));
 
--- Order Items Policies
 CREATE POLICY "order items owner read" ON public.order_items FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.orders o WHERE o.id = order_id AND o.user_id = auth.uid()));
 CREATE POLICY "order items owner insert" ON public.order_items FOR INSERT TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM public.orders o WHERE o.id = order_id AND o.user_id = auth.uid()));
 CREATE POLICY "order items organizer read" ON public.order_items FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.ticket_tiers tt JOIN public.events e ON e.id = tt.event_id JOIN public.organizers og ON og.id = e.organizer_id WHERE tt.id = order_items.tier_id AND og.user_id = auth.uid()));
 
--- Tickets Policies
 CREATE POLICY "tickets owner read" ON public.tickets FOR SELECT TO authenticated USING (auth.uid() = user_id);
 CREATE POLICY "tickets organizer read" ON public.tickets FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = event_id AND o.user_id = auth.uid()));
@@ -353,33 +370,8 @@ CREATE POLICY "tickets organizer update" ON public.tickets FOR UPDATE TO authent
   WITH CHECK (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = tickets.event_id AND o.user_id = auth.uid()));
 
 -- 9. TRIGGERS
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  INSERT INTO public.profiles (id, full_name, avatar_url)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
-    NEW.raw_user_meta_data->>'avatar_url'
-  )
-  ON CONFLICT (id) DO UPDATE SET
-    full_name = EXCLUDED.full_name,
-    avatar_url = EXCLUDED.avatar_url,
-    updated_at = now();
-  RETURN NEW;
-END; $$;
-
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
-CREATE OR REPLACE FUNCTION public.handle_new_user_role()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'user') ON CONFLICT DO NOTHING;
-  RETURN NEW;
-END; $$;
-
 CREATE TRIGGER on_auth_user_created_role AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_role();
-
 CREATE TRIGGER profiles_set_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER trg_organizers_updated BEFORE UPDATE ON public.organizers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER trg_events_updated BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -395,7 +387,6 @@ CREATE INDEX idx_tiers_event ON public.ticket_tiers(event_id);
 CREATE INDEX idx_orders_user ON public.orders(user_id);
 CREATE INDEX idx_tickets_user ON public.tickets(user_id);
 CREATE INDEX idx_tickets_event ON public.tickets(event_id);
-
 
 -- ==============================================================================
 -- 11. CARGA COMPLETA DOS ORGANIZADORES E EVENTOS
@@ -459,7 +450,7 @@ ON CONFLICT (slug) DO UPDATE SET
   featured = EXCLUDED.featured,
   image_url = EXCLUDED.image_url;
 
--- Lotes BTS (inseridos buscando dinamicamente o ID do evento por slug)
+-- Lotes BTS
 INSERT INTO public.ticket_tiers (event_id, name, description, price_cents, fee_cents, quantity_total, quantity_available, sort_order)
 SELECT e.id, t.name, t.description, t.price_cents, t.fee_cents, t.quantity_total, t.quantity_available, t.sort_order
 FROM public.events e
@@ -924,7 +915,3 @@ ON CONFLICT (slug) DO UPDATE SET
 INSERT INTO public.ticket_tiers (event_id, name, description, price_cents, fee_cents, quantity_total, quantity_available, sort_order)
 SELECT e.id, 'Passaporte 3 Dias', 'Acesso a todos os 3 dias do festival', 80000, 8000, 5000, 5000, 1
 FROM public.events e WHERE e.slug = 'festival-de-verao-buyticket-2026';
-
--- ==============================================================================
--- FIM DO SCRIPT - BANCO DE DADOS CONFIGURADO COM SUCESSO!
--- ==============================================================================
