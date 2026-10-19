@@ -153,41 +153,75 @@ async function fetchOrganizersMap(
   const map = new Map<string, OrganizerPublicRow>();
   const unique = [...new Set(ids)];
   if (unique.length === 0) return map;
-  const { data, error } = await supabase
-    .from("organizers_public" as "organizers")
-    .select("id, name, slug")
-    .in("id", unique);
-  if (error) throw error;
-  for (const row of (data ?? []) as unknown as OrganizerPublicRow[]) {
-    map.set(row.id, row);
+  try {
+    const { data, error } = await supabase
+      .from("organizers_public" as "organizers")
+      .select("id, name, slug")
+      .in("id", unique);
+    if (!error && data) {
+      for (const row of data as unknown as OrganizerPublicRow[]) {
+        map.set(row.id, row);
+      }
+      return map;
+    }
+  } catch {
+    // fallback
+  }
+
+  try {
+    const { data } = await supabase
+      .from("organizers")
+      .select("id, name, slug")
+      .in("id", unique);
+    for (const row of (data ?? []) as unknown as OrganizerPublicRow[]) {
+      map.set(row.id, row);
+    }
+  } catch {
+    // ignore
   }
   return map;
 }
 
 export async function fetchEvents(): Promise<EventItem[]> {
-  const { data, error } = await supabase
-    .from("events")
-    .select(EVENT_SELECT)
-    .eq("status", "published")
-    .order("starts_at", { ascending: true });
-  if (error) throw error;
-  const rows = (data ?? []) as unknown as EventRow[];
-  const orgs = await fetchOrganizersMap(rows.map((r) => r.organizer_id));
-  return rows.map((row) => mapEvent(row, orgs.get(row.organizer_id)));
+  try {
+    const { data, error } = await supabase
+      .from("events")
+      .select(EVENT_SELECT)
+      .eq("status", "published")
+      .order("starts_at", { ascending: true });
+    if (error) {
+      console.warn("[Events] Erro ao buscar eventos:", error.message);
+      return [];
+    }
+    const rows = (data ?? []) as unknown as EventRow[];
+    const orgs = await fetchOrganizersMap(rows.map((r) => r.organizer_id));
+    return rows.map((row) => mapEvent(row, orgs.get(row.organizer_id)));
+  } catch (err) {
+    console.error("[Events] Erro ao carregar eventos:", err);
+    return [];
+  }
 }
 
 export async function fetchEventBySlug(slug: string): Promise<EventItem | null> {
-  const { data, error } = await supabase
-    .from("events")
-    .select(EVENT_SELECT)
-    .eq("status", "published")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  const row = data as unknown as EventRow;
-  const orgs = await fetchOrganizersMap([row.organizer_id]);
-  return mapEvent(row, orgs.get(row.organizer_id));
+  try {
+    const { data, error } = await supabase
+      .from("events")
+      .select(EVENT_SELECT)
+      .eq("status", "published")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (error) {
+      console.warn("[Events] Erro ao buscar evento por slug:", error.message);
+      return null;
+    }
+    if (!data) return null;
+    const row = data as unknown as EventRow;
+    const orgs = await fetchOrganizersMap([row.organizer_id]);
+    return mapEvent(row, orgs.get(row.organizer_id));
+  } catch (err) {
+    console.error("[Events] Erro ao carregar evento:", err);
+    return null;
+  }
 }
 
 export function formatBRL(value: number) {

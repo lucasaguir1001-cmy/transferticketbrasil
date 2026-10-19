@@ -73,6 +73,14 @@ CREATE TABLE IF NOT EXISTS public.organizers (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- View segura de organizadores para leitura pública (excluindo user_id interno)
+CREATE OR REPLACE VIEW public.organizers_public AS
+SELECT id, name, slug, bio, avatar_url, created_at
+FROM public.organizers;
+
+GRANT SELECT ON public.organizers_public TO anon, authenticated;
+GRANT ALL ON public.organizers_public TO service_role;
+
 CREATE TABLE IF NOT EXISTS public.events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organizer_id UUID NOT NULL REFERENCES public.organizers(id) ON DELETE CASCADE,
