@@ -9,7 +9,7 @@
 -- 5. Criação da view organizers_public
 -- 6. Definição de permissões (GRANTs)
 -- 7. Políticas de Row Level Security (RLS)
--- 8. Triggers automáticos
+-- 8. Triggers automáticos (com DROP TRIGGER IF EXISTS)
 -- 9. Índices de performance
 -- 10. Carga completa de organizadores, eventos e lotes (BTS, Iron Maiden, Ed Sheeran, F1, etc.)
 -- ==============================================================================
@@ -72,7 +72,7 @@ END $$;
 CREATE SCHEMA IF NOT EXISTS private;
 GRANT USAGE ON SCHEMA private TO anon, authenticated, service_role;
 
--- 4. CRIAÇÃO DE TODAS AS TABELAS (Antes das funções e policies que as referenciam)
+-- 4. CRIAÇÃO DE TODAS AS TABELAS
 CREATE TABLE public.profiles (
   id UUID NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
@@ -194,7 +194,7 @@ CREATE TABLE public.tickets (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 5. FUNÇÕES DO SISTEMA (Agora que user_roles e profiles existem)
+-- 5. FUNÇÕES DO SISTEMA
 CREATE OR REPLACE FUNCTION private.has_role(_user_id uuid, _role public.app_role)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -369,15 +369,32 @@ CREATE POLICY "tickets organizer update" ON public.tickets FOR UPDATE TO authent
   USING (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = tickets.event_id AND o.user_id = auth.uid()))
   WITH CHECK (EXISTS (SELECT 1 FROM public.events e JOIN public.organizers o ON o.id = e.organizer_id WHERE e.id = tickets.event_id AND o.user_id = auth.uid()));
 
--- 9. TRIGGERS
+-- 9. TRIGGERS (Com DROP IF EXISTS para evitar erro de trigger duplicado)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+DROP TRIGGER IF EXISTS on_auth_user_created_role ON auth.users;
 CREATE TRIGGER on_auth_user_created_role AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_role();
+
+DROP TRIGGER IF EXISTS profiles_set_updated_at ON public.profiles;
 CREATE TRIGGER profiles_set_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_organizers_updated ON public.organizers;
 CREATE TRIGGER trg_organizers_updated BEFORE UPDATE ON public.organizers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_events_updated ON public.events;
 CREATE TRIGGER trg_events_updated BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_tiers_updated ON public.ticket_tiers;
 CREATE TRIGGER trg_tiers_updated BEFORE UPDATE ON public.ticket_tiers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_orders_updated ON public.orders;
 CREATE TRIGGER trg_orders_updated BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_tickets_updated ON public.tickets;
 CREATE TRIGGER trg_tickets_updated BEFORE UPDATE ON public.tickets FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS coupons_set_updated_at ON public.coupons;
 CREATE TRIGGER coupons_set_updated_at BEFORE UPDATE ON public.coupons FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- 10. ÍNDICES DE PERFORMANCE
