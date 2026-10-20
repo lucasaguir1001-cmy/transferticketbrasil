@@ -48,6 +48,8 @@ function CheckoutPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
+  const [phone, setPhone] = useState("");
+  const [checkingPaymentManually, setCheckingPaymentManually] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -64,6 +66,21 @@ function CheckoutPage() {
   const [copied, setCopied] = useState(false);
   const pollRef = useRef<number | null>(null);
 
+  function formatCpf(val: string) {
+    const digits = val.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+  }
+
+  function formatPhone(val: string) {
+    const digits = val.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  }
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -74,10 +91,11 @@ function CheckoutPage() {
         setEmail(data.user.email ?? "");
         const { data: profile } = await supabase
           .from("profiles")
-          .select("full_name")
+          .select("full_name, phone")
           .eq("id", data.user.id)
           .maybeSingle();
         if (profile?.full_name) setName(profile.full_name);
+        if (profile?.phone) setPhone(formatPhone(profile.phone));
       }
       setAuthChecked(true);
     })();
@@ -213,6 +231,27 @@ function CheckoutPage() {
     }
   };
 
+  const checkPaymentManually = async () => {
+    if (!pix) return;
+    setCheckingPaymentManually(true);
+    try {
+      const r = await checkPix({ data: { orderId: pix.orderId } });
+      if (r.status === "paid") {
+        stopPolling();
+        cart.clear();
+        router.invalidate();
+        toast.success("Pagamento confirmado!");
+        navigate({ to: "/pedidos/$id", params: { id: pix.orderId } });
+      } else {
+        toast.info("Pagamento ainda em processamento. Assim que o banco aprovar, você será redirecionado.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao verificar pagamento.");
+    } finally {
+      setCheckingPaymentManually(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authed) {
@@ -220,6 +259,15 @@ function CheckoutPage() {
       return;
     }
     if (cart.items.length === 0) return;
+
+    if (provider === "syncpay") {
+      const cleanCpf = cpf.replace(/\D/g, "");
+      if (cleanCpf.length !== 11) {
+        toast.error("Por favor, preencha um CPF válido com 11 dígitos para emissão do Pix.");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const payload = {
@@ -230,7 +278,11 @@ function CheckoutPage() {
       };
       if (provider === "syncpay") {
         const result = await submitPix({
-          data: { ...payload, ...(cpf ? { cpf: cpf.replace(/\D/g, "") } : {}) },
+          data: {
+            ...payload,
+            cpf: cpf.replace(/\D/g, ""),
+            phone: phone ? phone.replace(/\D/g, "") : undefined,
+          },
         });
         setPix({
           orderId: result.orderId,
@@ -284,8 +336,7 @@ function CheckoutPage() {
         <section className="container mx-auto max-w-xl px-4 py-10">
           <h1 className="font-display text-3xl font-bold">Pague com Pix</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Aponte a câmera do seu banco para o QR Code ou copie o código Pix. Assim que
-            confirmarmos o pagamento, seus ingressos serão liberados automaticamente.
+            Aponte a câmera do seu banco para o QR Code ou copie o código Pix abaixo. O pagamento é processado instantaneamente pela SyncPay e seus ingressos serão liberados na hora.
           </p>
 
           <div className="mt-6 rounded-2xl border border-border bg-card p-6 text-center">
@@ -304,20 +355,36 @@ function CheckoutPage() {
             )}
             {pix.qrCode && (
               <div className="mt-4">
-                <div className="rounded-lg border border-border bg-background p-3 text-xs font-mono break-all">
+                <div className="rounded-lg border border-border bg-background p-3 text-xs font-mono break-all text-muted-foreground select-all">
                   {pix.qrCode}
                 </div>
-                <button
-                  onClick={copyPix}
-                  className="bg-gradient-brand mt-3 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-brand-foreground shadow-glow"
-                >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  {copied ? "Copiado!" : "Copiar Pix"}
-                </button>
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={copyPix}
+                    className="bg-gradient-brand inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-brand-foreground shadow-glow"
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {copied ? "Código copiado!" : "Copiar código Pix"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={checkPaymentManually}
+                    disabled={checkingPaymentManually}
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                  >
+                    {checkingPaymentManually ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                    ) : (
+                      <Check className="h-4 w-4 text-brand" />
+                    )}
+                    Já paguei
+                  </button>
+                </div>
               </div>
             )}
             <div className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Aguardando pagamento…
+              <Loader2 className="h-4 w-4 animate-spin text-brand" /> Aguardando confirmação do banco…
             </div>
           </div>
         </section>
@@ -465,19 +532,35 @@ function CheckoutPage() {
                   />
                 </label>
                 {provider === "syncpay" && (
-                  <label className="text-sm sm:col-span-2">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                      CPF (para emissão do Pix)
-                    </span>
-                    <input
-                      required
-                      value={cpf}
-                      onChange={(e) => setCpf(e.target.value)}
-                      placeholder="000.000.000-00"
-                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                      disabled={!authed}
-                    />
-                  </label>
+                  <>
+                    <label className="text-sm">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                        CPF (para emissão do Pix) *
+                      </span>
+                      <input
+                        required
+                        value={cpf}
+                        onChange={(e) => setCpf(formatCpf(e.target.value))}
+                        placeholder="000.000.000-00"
+                        maxLength={14}
+                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono"
+                        disabled={!authed}
+                      />
+                    </label>
+                    <label className="text-sm">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Celular / WhatsApp (opcional)
+                      </span>
+                      <input
+                        value={phone}
+                        onChange={(e) => setPhone(formatPhone(e.target.value))}
+                        placeholder="(11) 99999-9999"
+                        maxLength={15}
+                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono"
+                        disabled={!authed}
+                      />
+                    </label>
+                  </>
                 )}
               </div>
             </div>

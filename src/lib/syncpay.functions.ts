@@ -20,7 +20,8 @@ const CheckoutInput = z.object({
   buyerName: z.string().min(2).max(120),
   buyerEmail: z.string().email(),
   couponCode: z.string().max(64).optional(),
-  cpf: z.string().min(11).max(14).optional(),
+  cpf: z.string().min(11).max(18).optional(),
+  phone: z.string().min(8).max(20).optional(),
 });
 
 function genCode() {
@@ -140,16 +141,33 @@ export const createSyncPayPixPayment = createServerFn({ method: "POST" })
     const baseUrl = process.env.APP_URL || process.env.VITE_APP_URL || "https://transferticketbrasil.com.br";
     const webhookUrl = `${baseUrl.replace(/\/$/, "")}/api/public/syncpay-webhook`;
 
+    // Telefone: se não foi informado no checkout, busca no perfil do usuário
+    let buyerPhone = data.phone?.replace(/\D/g, "");
+    if (!buyerPhone) {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("phone")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profile?.phone) {
+        buyerPhone = profile.phone.replace(/\D/g, "");
+      }
+    }
+    if (!buyerPhone || buyerPhone.length < 10) {
+      buyerPhone = "11999999999";
+    }
+
     // Gerar Pix via SyncPay
     try {
       const syncPayRes = await createSyncPayCashIn({
         amount: Number((totalCents / 100).toFixed(2)),
-        description: `Pedido ${order.id.slice(0, 8)}`,
+        description: `TTB - Pedido ${order.id.slice(0, 8).toUpperCase()}`,
         webhook_url: webhookUrl,
         client: {
           name: data.buyerName,
-          cpf: data.cpf ? data.cpf.replace(/\D/g, "") : undefined,
+          cpf: data.cpf ? data.cpf.replace(/\D/g, "") : "",
           email: data.buyerEmail,
+          phone: buyerPhone,
         },
       });
 
@@ -249,7 +267,12 @@ export async function confirmOrder(orderId: string, status: string) {
   }> = [];
 
   for (const it of items) {
-    const tier = it.tier as { event_id: string; quantity_available: number };
+    const rawTier = it.tier;
+    const tier = Array.isArray(rawTier)
+      ? (rawTier[0] as { event_id: string; quantity_available: number } | undefined)
+      : (rawTier as { event_id: string; quantity_available: number } | undefined);
+    if (!tier) continue;
+
     await supabaseAdmin
       .from("ticket_tiers")
       .update({ quantity_available: Math.max(0, tier.quantity_available - it.quantity) })
@@ -324,15 +347,31 @@ export const checkSyncPayPayment = createServerFn({ method: "POST" })
 export async function confirmOrderFromSyncPay(identifier: string, status: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+  const cleanId = String(identifier || "").trim();
+  if (!cleanId) {
+    return { ok: false, reason: "missing_identifier" };
+  }
+
   // Localiza pedido pelo provider_ref ou mp_payment_id
-  const { data: order } = await supabaseAdmin
+  let { data: order } = await supabaseAdmin
     .from("orders")
     .select("id")
-    .or(`provider_ref.eq.${identifier},mp_payment_id.eq.${identifier}`)
+    .or(`provider_ref.eq.${cleanId},mp_payment_id.eq.${cleanId}`)
     .maybeSingle();
 
+  // Se não encontrar e for um UUID válido, tenta localizar diretamente pelo ID do pedido
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+  if (!order && isUuid) {
+    const res = await supabaseAdmin
+      .from("orders")
+      .select("id")
+      .eq("id", cleanId)
+      .maybeSingle();
+    order = res.data;
+  }
+
   if (!order) {
-    console.warn(`[SyncPay Webhook] Pedido não encontrado para identifier: ${identifier}`);
+    console.warn(`[SyncPay Webhook] Pedido não encontrado para identifier: ${cleanId}`);
     return { ok: false, reason: "not_found" };
   }
 

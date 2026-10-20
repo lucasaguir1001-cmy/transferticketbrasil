@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { checkMpPayment } from "@/lib/mercadopago.functions";
+import { checkSyncPayPayment } from "@/lib/syncpay.functions";
 
 import { QRCodeSVG } from "qrcode.react";
 import { CheckCircle2, Calendar, MapPin, Ticket, Loader2, XCircle } from "lucide-react";
@@ -31,6 +32,7 @@ interface OrderData {
   total_cents: number;
   currency: string;
   status: string;
+  provider?: string;
   buyer_name: string | null;
   buyer_email: string | null;
   created_at: string;
@@ -56,13 +58,14 @@ function OrderPage() {
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const verifyPayment = useServerFn(checkMpPayment);
+  const verifyMp = useServerFn(checkMpPayment);
+  const verifySyncPay = useServerFn(checkSyncPayPayment);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id, total_cents, currency, status, buyer_name, buyer_email, created_at, tickets ( id, code, status, tier:ticket_tiers ( name ), event:events ( title, slug, starts_at, venue, city, image_url ) )",
+        "id, total_cents, currency, status, provider, buyer_name, buyer_email, created_at, tickets ( id, code, status, tier:ticket_tiers ( name ), event:events ( title, slug, starts_at, venue, city, image_url ) )",
       )
       .eq("id", id)
       .maybeSingle();
@@ -90,7 +93,8 @@ function OrderPage() {
     let stopped = false;
     const timer = window.setInterval(async () => {
       try {
-        const r = await verifyPayment({ data: { orderId: id } });
+        const checkFn = order.provider === "syncpay" ? verifySyncPay : verifyMp;
+        const r = await checkFn({ data: { orderId: id } });
         if (stopped) return;
         if (r.status === "paid" || r.status === "cancelled") {
           window.clearInterval(timer);
@@ -99,12 +103,12 @@ function OrderPage() {
       } catch (err) {
         console.error("[order poll]", err);
       }
-    }, 5000);
+    }, 4000);
     return () => {
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [order, id, load, verifyPayment]);
+  }, [order, id, load, verifyMp, verifySyncPay]);
 
 
   if (loading) {

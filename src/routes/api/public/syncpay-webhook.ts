@@ -9,27 +9,40 @@ export const Route = createFileRoute("/api/public/syncpay-webhook")({
         try {
           body = (await request.json()) as Record<string, unknown>;
         } catch {
-          return new Response("Invalid JSON", { status: 400 });
+          return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
         }
 
         const url = new URL(request.url);
+        const dataObj = (body.data as Record<string, unknown>) || {};
+
         const identifier =
+          (dataObj.id as string) ||
+          (dataObj.identifier as string) ||
+          (dataObj.reference_id as string) ||
           (body.identifier as string) ||
           (body.id as string) ||
-          ((body.data as { id?: string; identifier?: string })?.identifier) ||
-          ((body.data as { id?: string })?.id) ||
+          (body.reference_id as string) ||
           url.searchParams.get("identifier") ||
           url.searchParams.get("id");
 
         const status =
+          (dataObj.status as string) ||
           (body.status as string) ||
-          ((body.data as { status?: string })?.status) ||
           (body.event as string) ||
           "";
 
         if (!identifier) {
-          console.warn("[SyncPay Webhook] No identifier found in payload:", body);
-          return new Response("Ignored: Missing identifier", { status: 200 });
+          console.warn("[SyncPay Webhook] Identificador ausente no payload:", body);
+          return new Response(
+            JSON.stringify({ received: true, ignored: "Missing identifier" }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
         }
 
         try {
@@ -40,10 +53,20 @@ export const Route = createFileRoute("/api/public/syncpay-webhook")({
           });
         } catch (err) {
           console.error("[SyncPay Webhook Error]", err);
-          return new Response("Internal Server Error", { status: 500 });
+          return new Response(
+            JSON.stringify({ error: "Internal Server Error" }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
         }
       },
-      GET: async () => new Response("SyncPay Webhook OK", { status: 200 }),
+      GET: async () =>
+        new Response(JSON.stringify({ status: "SyncPay Webhook OK" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
     },
   },
 });
