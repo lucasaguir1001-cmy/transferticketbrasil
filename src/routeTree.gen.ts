@@ -14,6 +14,8 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CentralDeAjudaRouteImport } from './routes/central-de-ajuda'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as PoliticaDePrivacidadeRouteImport } from './routes/politica-de-privacidade'
 import { Route as PoliticaDeTrocaETransferenciaRouteImport } from './routes/politica-de-troca-e-transferencia'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
@@ -58,6 +60,16 @@ const CentralDeAjudaRoute = CentralDeAjudaRouteImport.update({
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PoliticaDePrivacidadeRoute = PoliticaDePrivacidadeRouteImport.update({
@@ -178,6 +190,8 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/central-de-ajuda': typeof CentralDeAjudaRoute
   '/checkout': typeof CheckoutRoute
+  '/entrar': typeof EntrarRoute
+  '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/politica-de-troca-e-transferencia': typeof PoliticaDeTrocaETransferenciaRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
@@ -205,6 +219,8 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/central-de-ajuda': typeof CentralDeAjudaRoute
   '/checkout': typeof CheckoutRoute
+  '/entrar': typeof EntrarRoute
+  '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/politica-de-troca-e-transferencia': typeof PoliticaDeTrocaETransferenciaRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
@@ -233,6 +249,8 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/central-de-ajuda': typeof CentralDeAjudaRoute
   '/checkout': typeof CheckoutRoute
+  '/entrar': typeof EntrarRoute
+  '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/politica-de-troca-e-transferencia': typeof PoliticaDeTrocaETransferenciaRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
@@ -262,6 +280,8 @@ export interface FileRouteTypes {
     | '/auth'
     | '/central-de-ajuda'
     | '/checkout'
+    | '/entrar'
+    | '/login'
     | '/politica-de-privacidade'
     | '/politica-de-troca-e-transferencia'
     | '/redefinir-senha'
@@ -289,6 +309,8 @@ export interface FileRouteTypes {
     | '/auth'
     | '/central-de-ajuda'
     | '/checkout'
+    | '/entrar'
+    | '/login'
     | '/politica-de-privacidade'
     | '/politica-de-troca-e-transferencia'
     | '/redefinir-senha'
@@ -316,6 +338,8 @@ export interface FileRouteTypes {
     | '/auth'
     | '/central-de-ajuda'
     | '/checkout'
+    | '/entrar'
+    | '/login'
     | '/politica-de-privacidade'
     | '/politica-de-troca-e-transferencia'
     | '/redefinir-senha'
@@ -345,6 +369,8 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CentralDeAjudaRoute: typeof CentralDeAjudaRoute
   CheckoutRoute: typeof CheckoutRoute
+  EntrarRoute: typeof EntrarRoute
+  LoginRoute: typeof LoginRoute
   PoliticaDePrivacidadeRoute: typeof PoliticaDePrivacidadeRoute
   PoliticaDeTrocaETransferenciaRoute: typeof PoliticaDeTrocaETransferenciaRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
@@ -393,6 +419,20 @@ declare module '@tanstack/react-router' {
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/politica-de-privacidade': {
@@ -593,6 +633,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CentralDeAjudaRoute: CentralDeAjudaRoute,
   CheckoutRoute: CheckoutRoute,
+  EntrarRoute: EntrarRoute,
+  LoginRoute: LoginRoute,
   PoliticaDePrivacidadeRoute: PoliticaDePrivacidadeRoute,
   PoliticaDeTrocaETransferenciaRoute: PoliticaDeTrocaETransferenciaRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,

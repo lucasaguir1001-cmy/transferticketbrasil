@@ -109,11 +109,34 @@ function AuthPage() {
           throw error;
         }
         setResetSent(true);
-        toast.success("Se este email existir, enviamos o link de redefinição.");
       } else if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const rawInput = email.trim().toLowerCase();
+        const emailToUse = rawInput.includes("@")
+          ? rawInput
+          : `${rawInput}@transferticketbrasil.com.br`;
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: emailToUse,
+          password,
+        });
         if (error) throw error;
         toast.success("Bem-vindo de volta!");
+
+        // Se o usuário logado for admin e não houver redirect explícito, direciona diretamente para /admin
+        if (!redirect && data?.user) {
+          const { data: roleData } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", data.user.id)
+            .eq("role", "admin")
+            .maybeSingle();
+
+          if (roleData) {
+            window.location.replace("/admin");
+            return;
+          }
+        }
+
         window.location.replace(safeRedirect);
       } else {
 
@@ -269,11 +292,12 @@ function AuthPage() {
               </>
             )}
             <Field
-              label="Email"
-              type="email"
+              label={mode === "login" ? "Email ou usuário (ex: admin)" : "Email"}
+              type={mode === "login" ? "text" : "email"}
               value={email}
               onChange={setEmail}
               required
+              placeholder={mode === "login" ? "admin ou seu@email.com" : "seu@email.com"}
             />
             {mode !== "forgot" && (
               <Field
