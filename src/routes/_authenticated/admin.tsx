@@ -28,7 +28,35 @@ export const Route = createFileRoute("/_authenticated/admin")({
   ] }),
   loader: ({ context }) => context.queryClient.ensureQueryData(ownerQuery),
   component: AdminDashboard,
-  errorComponent: ({ reset }) => <><SiteHeader /><main className="container mx-auto px-4 py-16"><ShieldCheck className="mb-4 size-8 text-brand" /><h1 className="text-2xl font-semibold">Administração</h1><p className="my-4 text-muted-foreground">Acesso restrito. Entre com a conta administradora e tente novamente.</p><Button onClick={reset}>Tentar novamente</Button></main></>,
+  errorComponent: ({ reset }) => (
+    <>
+      <SiteHeader />
+      <main className="container mx-auto max-w-lg px-4 py-16 text-center">
+        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+          <ShieldCheck className="h-8 w-8" />
+        </div>
+        <h1 className="text-2xl font-bold">Administração</h1>
+        <p className="my-4 text-muted-foreground">
+          Acesso restrito. Esta conta não possui o privilégio de administrador ("admin") registrado no banco de dados.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button onClick={reset} variant="default">
+            Tentar novamente
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const { supabase } = await import("@/integrations/supabase/client");
+              await supabase.auth.signOut();
+              window.location.href = "/auth";
+            }}
+          >
+            Trocar de conta
+          </Button>
+        </div>
+      </main>
+    </>
+  ),
 });
 
 type OwnerData = Awaited<ReturnType<typeof getOwnerDashboard>>;

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Ticket, LogOut, User as UserIcon, Calendar, ChevronRight } from "lucide-react";
+import { Ticket, LogOut, User as UserIcon, Calendar, ChevronRight, ShieldCheck } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,6 +35,7 @@ function AccountPage() {
   const [email, setEmail] = useState("");
   const [createdAt, setCreatedAt] = useState("");
   const [saving, setSaving] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -62,6 +63,19 @@ function AccountPage() {
         phone:
           data?.phone ?? (typeof meta.phone === "string" ? meta.phone : null),
       });
+
+      // Verifica se o usuário possui cargo de admin
+      const emailHasAdmin = user.email?.toLowerCase().includes("admin") ?? false;
+      if (emailHasAdmin) setIsAdmin(true);
+
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (roleData) setIsAdmin(true);
     })();
   }, []);
 
@@ -110,15 +124,43 @@ function AccountPage() {
             </h1>
             <p className="text-sm text-muted-foreground">{email}</p>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
-          >
-            <LogOut className="h-4 w-4" />
-            Sair
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-foreground shadow-glow transition-all hover:brightness-110"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Painel Admin
+              </Link>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
+          </div>
         </div>
       </section>
+
+      {isAdmin && (
+        <section className="border-b border-brand/30 bg-brand/10 py-3">
+          <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 px-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-brand">
+              <ShieldCheck className="h-5 w-5" />
+              <span>Você está conectado com privilégios de Administrador.</span>
+            </div>
+            <Link
+              to="/admin"
+              className="rounded-full bg-brand px-4 py-1.5 text-xs font-semibold text-brand-foreground shadow-glow transition-all hover:brightness-110"
+            >
+              Ir para Painel de Administração &rarr;
+            </Link>
+          </div>
+        </section>
+      )}
 
       <section className="container mx-auto grid gap-8 px-4 py-12 lg:grid-cols-[1fr_360px]">
         <div className="space-y-8">

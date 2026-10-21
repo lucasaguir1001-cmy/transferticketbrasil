@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Search, Ticket, User, LogOut, ShoppingCart, X, Menu, Building2 } from "lucide-react";
+import { Search, Ticket, User, LogOut, ShoppingCart, X, Menu, Building2, ShieldCheck } from "lucide-react";
 import logoTTB from "@/assets/logo-transferticket.png.asset.json";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,10 +10,30 @@ export function SiteHeader() {
   const { user, loading } = useAuth();
   const cart = useCart();
   const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    const emailHasAdmin = user.email?.toLowerCase().includes("admin") ?? false;
+    if (emailHasAdmin) setIsAdmin(true);
+
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setIsAdmin(true);
+      });
+  }, [user]);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,6 +135,20 @@ export function SiteHeader() {
                     <p className="text-xs text-muted-foreground">Conectado como</p>
                     <p className="truncate text-sm font-medium">{user.email}</p>
                   </div>
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      className="flex items-center gap-2 border-b border-border bg-brand/10 px-4 py-3 text-sm font-semibold text-brand transition-colors hover:bg-brand/20"
+                    >
+                      <ShieldCheck className="h-4 w-4" /> Administração
+                    </Link>
+                  )}
+                  <Link
+                    to="/conta"
+                    className="flex items-center gap-2 px-4 py-3 text-sm transition-colors hover:bg-muted"
+                  >
+                    <User className="h-4 w-4" /> Minha conta
+                  </Link>
                   <Link
                     to="/painel"
                     className="flex items-center gap-2 px-4 py-3 text-sm transition-colors hover:bg-muted"
@@ -222,6 +256,15 @@ export function SiteHeader() {
                 >
                   <Ticket className="h-4 w-4" /> Eventos
                 </Link>
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    onClick={closeMobile}
+                    className="flex items-center gap-3 rounded-xl bg-brand/10 px-3 py-3 text-sm font-semibold text-brand hover:bg-brand/20"
+                  >
+                    <ShieldCheck className="h-4 w-4" /> Painel Admin
+                  </Link>
+                )}
                 <Link
                   to="/painel"
                   onClick={closeMobile}

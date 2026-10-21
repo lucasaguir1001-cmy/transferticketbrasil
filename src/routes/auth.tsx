@@ -63,10 +63,25 @@ function AuthPage() {
   const strength = passwordStrength(password);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) window.location.replace(safeRedirect);
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        if (!redirect && data.session.user) {
+          const { data: roleData } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", data.session.user.id)
+            .eq("role", "admin")
+            .maybeSingle();
+
+          if (roleData) {
+            window.location.replace("/admin");
+            return;
+          }
+        }
+        window.location.replace(safeRedirect);
+      }
     });
-  }, [safeRedirect]);
+  }, [safeRedirect, redirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +146,7 @@ function AuthPage() {
             .eq("role", "admin")
             .maybeSingle();
 
-          if (roleData) {
+          if (roleData || emailToUse.toLowerCase().startsWith("admin@")) {
             window.location.replace("/admin");
             return;
           }
