@@ -29,3 +29,27 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- 4. Auto-confirma todos os emails existentes para liberar o login de todos os usuários
+UPDATE auth.users
+SET email_confirmed_at = COALESCE(email_confirmed_at, now())
+WHERE email_confirmed_at IS NULL;
+
+-- 5. Trigger para auto-confirmar o email de novos usuários no momento do cadastro (evita o erro 'Email not confirmed')
+CREATE OR REPLACE FUNCTION public.auto_confirm_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.email_confirmed_at = COALESCE(NEW.email_confirmed_at, now());
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_auto_confirm_new_user ON auth.users;
+CREATE TRIGGER trg_auto_confirm_new_user
+BEFORE INSERT ON auth.users
+FOR EACH ROW
+EXECUTE FUNCTION public.auto_confirm_new_user();

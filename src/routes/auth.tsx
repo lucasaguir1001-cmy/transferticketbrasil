@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Eye, EyeOff, Clock } from "lucide-react";
+import { Eye, EyeOff, Clock, User } from "lucide-react";
 import logoTTB from "@/assets/logo-transferticket.png.asset.json";
 import { supabase } from "@/integrations/supabase/client";
 import { useRateLimitCountdown } from "@/hooks/use-rate-limit-countdown";
@@ -53,7 +53,7 @@ function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
-  const [limitVersion, setLimitVersion] = useState(0);
+  const [currentSessionUser, setCurrentSessionUser] = useState<{ id: string; email?: string } | null>(null);
 
   const resetKey = `reset-request:${email.trim().toLowerCase()}`;
   const resetWaitMs = useRateLimitCountdown(resetKey, RESET_REQUEST_LIMIT, limitVersion);
@@ -64,21 +64,12 @@ function AuthPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
-      if (data.session) {
-        if (!redirect && data.session.user) {
-          const { data: roleData } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", data.session.user.id)
-            .eq("role", "admin")
-            .maybeSingle();
-
-          if (roleData) {
-            window.location.replace("/admin");
-            return;
-          }
+      if (data.session?.user) {
+        if (redirect) {
+          window.location.replace(safeRedirect);
+          return;
         }
-        window.location.replace(safeRedirect);
+        setCurrentSessionUser(data.session.user);
       }
     });
   }, [safeRedirect, redirect]);
@@ -90,8 +81,8 @@ function AuthPage() {
         toast.error("As senhas não conferem.");
         return;
       }
-      if (strength.score < 3) {
-        toast.error("Use ao menos 8 caracteres, com letras e números.");
+      if (password.length < 6) {
+        toast.error("A senha deve ter no mínimo 6 caracteres.");
         return;
       }
     }
@@ -146,7 +137,7 @@ function AuthPage() {
             .eq("role", "admin")
             .maybeSingle();
 
-          if (roleData || emailToUse.toLowerCase().startsWith("admin@")) {
+          if (roleData || emailToUse.toLowerCase().startsWith("admin@") || data.user.email?.toLowerCase().includes("admin")) {
             window.location.replace("/admin");
             return;
           }
@@ -154,22 +145,56 @@ function AuthPage() {
 
         window.location.replace(safeRedirect);
       } else {
+        const rawInput = email.trim().toLowerCase();
+        const emailToUse = rawInput.includes("@")
+          ? rawInput
+          : `${rawInput}@transferticketbrasil.com.br`;
 
-        const { error } = await supabase.auth.signUp({
-          email,
+        const { data, error } = await supabase.auth.signUp({
+          email: emailToUse,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}${safeRedirect}`,
-            data: { full_name: fullName, phone },
+            data: {
+              full_name: fullName.trim() || emailToUse.split("@")[0],
+              phone: phone.trim() || null,
+            },
           },
         });
         if (error) throw error;
+
+        // Tenta conectar imediatamente para já criar a sessão
+        const { data: autoLogin, error: autoLoginError } = await supabase.auth.signInWithPassword({
+          email: emailToUse,
+          password,
+        });
+
+        if (!autoLoginError && autoLogin?.session) {
+          toast.success("Conta criada e conectada com sucesso!");
+          if (!redirect && (emailToUse.startsWith("admin@") || autoLogin.user?.email?.toLowerCase().includes("admin"))) {
+            window.location.replace("/admin");
+            return;
+          }
+          window.location.replace(safeRedirect);
+          return;
+        }
+
+        if (data?.session) {
+          toast.success("Conta criada com sucesso!");
+          if (!redirect && (emailToUse.startsWith("admin@") || data.user?.email?.toLowerCase().includes("admin"))) {
+            window.location.replace("/admin");
+            return;
+          }
+          window.location.replace(safeRedirect);
+          return;
+        }
+
         toast.success("Conta criada! Você já pode entrar.");
         setMode("login");
         setConfirmPassword("");
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Erro ao autenticar";
+      const message = getFriendlyAuthError(err);
       toast.error(message);
     } finally {
       setBusy(false);
@@ -239,6 +264,42 @@ function AuthPage() {
                 : "Informe seu email e enviaremos um link seguro para criar uma nova senha."}
           </p>
 
+          {currentSessionUser && (
+            <div className="mt-6 rounded-2xl border border-brand/30 bg-brand/10 p-4 text-sm">
+              <div className="flex items-center gap-2 font-semibold text-brand">
+                <User className="h-4 w-4" />
+                <span>Conectado no momento:</span>
+              </div>
+              <p className="mt-1 font-medium text-foreground">{currentSessionUser.email}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (currentSessionUser.email?.toLowerCase().includes("admin")) {
+                      window.location.href = "/admin";
+                    } else {
+                      window.location.href = "/conta";
+                    }
+                  }}
+                  className="rounded-xl bg-brand px-3 py-1.5 text-xs font-semibold text-brand-foreground shadow-glow hover:brightness-110"
+                >
+                  Ir para o painel &rarr;
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    setCurrentSessionUser(null);
+                    toast.info("Você saiu da conta.");
+                  }}
+                  className="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                >
+                  Sair desta conta
+                </button>
+              </div>
+            </div>
+          )}
+
           {mode !== "forgot" && (
             <>
               <button
@@ -307,12 +368,12 @@ function AuthPage() {
               </>
             )}
             <Field
-              label={mode === "login" ? "Email ou usuário (ex: admin)" : "Email"}
-              type={mode === "login" ? "text" : "email"}
+              label={mode === "login" ? "Email ou usuário (ex: admin)" : "Email ou usuário"}
+              type="text"
               value={email}
               onChange={setEmail}
               required
-              placeholder={mode === "login" ? "admin ou seu@email.com" : "seu@email.com"}
+              placeholder="admin ou seu@email.com"
             />
             {mode !== "forgot" && (
               <Field
@@ -321,7 +382,7 @@ function AuthPage() {
                 value={password}
                 onChange={setPassword}
                 required
-                minLength={mode === "signup" ? 8 : 6}
+                minLength={6}
                 revealable
               />
             )}
@@ -340,9 +401,8 @@ function AuthPage() {
 
             {mode === "signup" && (
               <ul className="space-y-1 text-[11px] text-muted-foreground">
-                <li>• Mínimo de 8 caracteres</li>
-                <li>• Pelo menos 1 letra e 1 número</li>
-                <li>• Recomendado: 1 letra maiúscula e 1 símbolo (!@#$)</li>
+                <li>• Mínimo de 6 caracteres</li>
+                <li>• Aceita usuário simples (ex: admin) ou email (ex: seu@email.com)</li>
               </ul>
             )}
 
@@ -365,7 +425,7 @@ function AuthPage() {
                   value={confirmPassword}
                   onChange={setConfirmPassword}
                   required
-                  minLength={8}
+                  minLength={6}
                   revealable
                 />
                 {confirmPassword.length > 0 && confirmPassword !== password && (
@@ -443,17 +503,43 @@ function getSafeRedirect(redirect?: string) {
   return "/conta";
 }
 
+function getFriendlyAuthError(err: unknown): string {
+  if (!err) return "Erro desconhecido ao processar autenticação.";
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+
+  if (msg.includes("invalid login credentials")) {
+    return "Email/usuário ou senha incorretos. Verifique e tente novamente.";
+  }
+  if (msg.includes("email not confirmed")) {
+    return "Seu email ainda não foi confirmado. Verifique sua caixa de entrada e spam, ou execute a liberação no banco de dados.";
+  }
+  if (msg.includes("user already registered") || msg.includes("already registered") || msg.includes("already exists")) {
+    return "Este email já está cadastrado. Vá para a aba 'Entrar' para fazer login.";
+  }
+  if (msg.includes("password should be at least")) {
+    return "A senha deve ter pelo menos 6 caracteres.";
+  }
+  if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("over_email_send_rate_limit")) {
+    return "Muitas tentativas em pouco tempo. Por favor, aguarde alguns instantes e tente novamente.";
+  }
+  if (msg.includes("invalid format") || msg.includes("validate email")) {
+    return "Formato de email inválido. Informe um email válido (ex: seu@email.com) ou 'admin'.";
+  }
+
+  return err instanceof Error ? err.message : "Erro ao processar autenticação.";
+}
+
 function passwordStrength(password: string) {
   let score = 0;
+  if (password.length >= 6) score++;
   if (password.length >= 8) score++;
   if (/[a-zA-Z]/.test(password) && /\d/.test(password)) score++;
-  if (/[A-Z]/.test(password)) score++;
-  if (/[^a-zA-Z0-9]/.test(password) || password.length >= 12) score++;
-  const labels = ["Muito fraca", "Fraca", "Razoável", "Boa", "Forte"];
+  if (/[A-Z]/.test(password) || /[^a-zA-Z0-9]/.test(password)) score++;
+  const labels = ["Muito fraca", "Razoável", "Boa", "Muito boa", "Forte"];
   const colors = [
     "bg-destructive",
-    "bg-destructive",
     "bg-yellow-500",
+    "bg-blue-500",
     "bg-brand",
     "bg-emerald-500",
   ];
@@ -495,6 +581,8 @@ function Field({
           required={required}
           minLength={minLength}
           placeholder={placeholder}
+          autoCapitalize="none"
+          autoCorrect="off"
           className={`w-full rounded-xl border border-border bg-card px-4 py-3 text-sm outline-none transition-colors focus:border-brand ${revealable ? "pr-12" : ""}`}
         />
         {revealable && (
