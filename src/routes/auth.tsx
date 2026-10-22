@@ -53,6 +53,7 @@ function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
+  const [limitVersion, setLimitVersion] = useState(0);
   const [currentSessionUser, setCurrentSessionUser] = useState<{ id: string; email?: string } | null>(null);
 
   const resetKey = `reset-request:${email.trim().toLowerCase()}`;
