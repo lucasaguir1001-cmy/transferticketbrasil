@@ -169,7 +169,7 @@ export function SiteHeader() {
             </div>
           ) : (
             <Link
-              to="/auth"
+              to="/login"
               className="hidden items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted sm:inline-flex"
             >
               <User className="h-4 w-4" />
@@ -283,7 +283,7 @@ export function SiteHeader() {
                 )}
                 {!user && (
                   <Link
-                    to="/auth"
+                    to="/login"
                     onClick={closeMobile}
                     className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-foreground hover:bg-muted"
                   >

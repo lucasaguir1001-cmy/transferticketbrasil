@@ -26,7 +26,10 @@ export const Route = createFileRoute("/_authenticated/admin")({
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
     { name: "robots", content: "noindex,nofollow" },
   ] }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(ownerQuery),
+  loader: ({ context }) => {
+    if (typeof window === "undefined") return null;
+    return context.queryClient.ensureQueryData(ownerQuery);
+  },
   component: AdminDashboard,
   errorComponent: ({ reset }) => (
     <>

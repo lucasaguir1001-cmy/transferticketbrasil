@@ -42,16 +42,12 @@ export function AuthPage({ defaultRedirect }: AuthPageProps = {}) {
   const strength = passwordStrength(password);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
+    supabase.auth.getSession().then(({ data }) => {
       if (data.session?.user) {
-        if (redirect) {
-          window.location.replace(safeRedirect);
-          return;
-        }
         setCurrentSessionUser(data.session.user);
       }
     });
-  }, [safeRedirect, redirect]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -464,9 +460,11 @@ function getSafeRedirect(redirect?: string) {
     return "/conta";
   }
 
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://transferticketbrasil.vercel.app";
+
   try {
-    const url = new URL(redirect, window.location.origin);
-    if (url.origin === window.location.origin) {
+    const url = new URL(redirect, origin);
+    if (url.origin === origin) {
       return `${url.pathname}${url.search}${url.hash}`;
     }
   } catch {

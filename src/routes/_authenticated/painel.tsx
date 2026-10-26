@@ -18,9 +18,10 @@ export const Route = createFileRoute("/_authenticated/painel")({
     ],
   }),
   beforeLoad: ({ context, location }) => {
+    if (typeof window === "undefined") return;
     const user = (context as { user?: { id: string } }).user;
     if (!user) {
-      throw redirect({ to: "/auth", search: { redirect: location.href } });
+      throw redirect({ to: "/login", search: { redirect: location.href } });
     }
   },
 
