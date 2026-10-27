@@ -41,7 +41,11 @@ function AuthenticatedLayout() {
   }
 
   if (!user) {
-    return <AuthPage defaultRedirect="/admin" />;
+    const defaultRedirect =
+      typeof window !== "undefined" && window.location.pathname.startsWith("/")
+        ? window.location.pathname
+        : "/admin";
+    return <AuthPage defaultRedirect={defaultRedirect} />;
   }
 
   return <Outlet />;

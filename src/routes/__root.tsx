@@ -19,11 +19,41 @@ function NotFoundComponent() {
   const [email, setEmail] = useState("admin");
   const [password, setPassword] = useState("123456");
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const fullPath = window.location.pathname.toLowerCase();
       setCurrentPath(window.location.pathname + window.location.search);
+
+      // Se por algum motivo o roteador renderizou 404 para uma rota válida de admin ou login, redireciona diretamente
+      if (
+        fullPath === "/admin" ||
+        fullPath === "/admin/" ||
+        fullPath.startsWith("/admin/") ||
+        fullPath === "/painel-admin" ||
+        fullPath === "/dashboard" ||
+        fullPath === "/administracao" ||
+        fullPath === "/adm"
+      ) {
+        window.location.replace("/admin");
+        return;
+      }
+
+      if (
+        fullPath === "/login" ||
+        fullPath === "/login/" ||
+        fullPath === "/entrar" ||
+        fullPath === "/entrar/" ||
+        fullPath === "/auth" ||
+        fullPath === "/auth/"
+      ) {
+        window.location.replace("/login");
+        return;
+      }
+
       import("@/integrations/supabase/client").then(({ supabase }) => {
         supabase.auth.getSession().then(({ data }) => {
           if (data.session?.user?.email) {
@@ -37,6 +67,9 @@ function NotFoundComponent() {
   const handleQuickLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
     try {
       const { supabase } = await import("@/integrations/supabase/client");
       const rawInput = email.trim().toLowerCase();
@@ -50,19 +83,25 @@ function NotFoundComponent() {
       });
 
       if (error) {
-        alert(error.message);
+        setErrorMsg(error.message);
         return;
       }
+
+      setSuccessMsg("Conectado com sucesso! Redirecionando...");
 
       // Se for admin, direciona para /admin
       if (emailToUse.startsWith("admin@") || data?.user?.email?.toLowerCase().includes("admin")) {
-        window.location.href = "/admin";
+        setTimeout(() => {
+          window.location.replace("/admin");
+        }, 300);
         return;
       }
 
-      window.location.href = "/conta";
+      setTimeout(() => {
+        window.location.replace("/conta");
+      }, 300);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao entrar");
+      setErrorMsg(err instanceof Error ? err.message : "Erro ao entrar");
     } finally {
       setBusy(false);
     }
@@ -103,6 +142,18 @@ function NotFoundComponent() {
           <p className="mt-1 text-xs text-muted-foreground">
             Faça login diretamente abaixo para acessar o painel administrativo ou sua conta.
           </p>
+
+          {errorMsg && (
+            <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              {errorMsg}
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400">
+              {successMsg}
+            </div>
+          )}
 
           {sessionUser ? (
             <div className="mt-4 space-y-3">

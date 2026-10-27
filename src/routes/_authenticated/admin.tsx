@@ -88,6 +88,11 @@ function AdminDashboard() {
           <p className="my-4 text-muted-foreground">
             Acesso restrito. Esta conta não possui o privilégio de administrador ("admin") registrado no banco de dados.
           </p>
+          {error && (
+            <p className="mb-4 text-xs font-mono text-destructive bg-destructive/10 p-2 rounded">
+              {error instanceof Error ? error.message : String(error)}
+            </p>
+          )}
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Button onClick={() => void refetch()} variant="default">
               Tentar novamente

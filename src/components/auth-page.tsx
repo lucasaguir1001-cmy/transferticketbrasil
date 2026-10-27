@@ -103,8 +103,12 @@ export function AuthPage({ defaultRedirect }: AuthPageProps = {}) {
         if (error) throw error;
         toast.success("Bem-vindo de volta!");
 
-        // Se o usuário logado for admin e não houver redirect explícito, direciona para /admin
-        if (!redirect && data?.user) {
+        // Se o usuário for admin, direciona sempre para /admin (a menos que tenha redirect específico para outra área)
+        const isUserAdmin =
+          emailToUse.toLowerCase().startsWith("admin@") ||
+          data?.user?.email?.toLowerCase().includes("admin");
+
+        if (isUserAdmin || !redirect) {
           const { data: roleData } = await supabase
             .from("user_roles")
             .select("role")
@@ -112,7 +116,7 @@ export function AuthPage({ defaultRedirect }: AuthPageProps = {}) {
             .eq("role", "admin")
             .maybeSingle();
 
-          if (roleData || emailToUse.toLowerCase().startsWith("admin@") || data.user.email?.toLowerCase().includes("admin")) {
+          if (roleData || isUserAdmin) {
             window.location.replace("/admin");
             return;
           }
