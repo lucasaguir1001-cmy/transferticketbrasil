@@ -17,14 +17,6 @@ export const Route = createFileRoute("/_authenticated/painel")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  beforeLoad: ({ context, location }) => {
-    if (typeof window === "undefined") return;
-    const user = (context as { user?: { id: string } }).user;
-    if (!user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
-
   component: PainelLayout,
 });
 

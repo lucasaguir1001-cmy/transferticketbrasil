@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -15,33 +15,157 @@ import { CartProvider } from "@/lib/cart";
 import { Toaster } from "sonner";
 
 function NotFoundComponent() {
+  const [currentPath, setCurrentPath] = useState("");
+  const [email, setEmail] = useState("admin");
+  const [password, setPassword] = useState("123456");
+  const [busy, setBusy] = useState(false);
+  const [sessionUser, setSessionUser] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setCurrentPath(window.location.pathname + window.location.search);
+      import("@/integrations/supabase/client").then(({ supabase }) => {
+        supabase.auth.getSession().then(({ data }) => {
+          if (data.session?.user?.email) {
+            setSessionUser(data.session.user.email);
+          }
+        });
+      });
+    }
+  }, []);
+
+  const handleQuickLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const rawInput = email.trim().toLowerCase();
+      const emailToUse = rawInput.includes("@")
+        ? rawInput
+        : `${rawInput}@transferticketbrasil.com.br`;
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailToUse,
+        password,
+      });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      // Se for admin, direciona para /admin
+      if (emailToUse.startsWith("admin@") || data?.user?.email?.toLowerCase().includes("admin")) {
+        window.location.href = "/admin";
+        return;
+      }
+
+      window.location.href = "/conta";
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao entrar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12">
+      <div className="w-full max-w-md text-center">
+        <h1 className="text-6xl font-bold text-foreground">404</h1>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Página não encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          {currentPath ? `O endereço "${currentPath}" não existe ou foi movido.` : "A página que você procura não existe ou foi movida."}
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
+
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Página Inicial
           </a>
           <a
             href="/login"
-            className="inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+            className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
           >
             Fazer login / Entrar
           </a>
           <a
             href="/admin"
-            className="inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+            className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
           >
             Painel Admin
           </a>
+        </div>
+
+        <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-left shadow-sm">
+          <h3 className="text-base font-semibold text-foreground">Entrar no sistema</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Faça login diretamente abaixo para acessar o painel administrativo ou sua conta.
+          </p>
+
+          {sessionUser ? (
+            <div className="mt-4 space-y-3">
+              <div className="rounded-xl bg-muted p-3 text-xs">
+                <span className="font-semibold text-foreground">Conectado como:</span> {sessionUser}
+              </div>
+              <div className="flex gap-2">
+                <a
+                  href="/admin"
+                  className="inline-flex flex-1 items-center justify-center rounded-xl bg-brand py-2 text-sm font-semibold text-brand-foreground hover:brightness-110"
+                >
+                  Abrir Painel Admin &rarr;
+                </a>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const { supabase } = await import("@/integrations/supabase/client");
+                    await supabase.auth.signOut();
+                    setSessionUser(null);
+                  }}
+                  className="rounded-xl border border-border px-3 py-2 text-xs hover:bg-muted"
+                >
+                  Sair
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleQuickLogin} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Usuário ou Email
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin ou seu@email.com"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Senha
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="123456"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full rounded-xl bg-brand py-2.5 text-sm font-semibold text-brand-foreground shadow-glow hover:brightness-110 disabled:opacity-50"
+              >
+                {busy ? "Entrando..." : "Entrar agora"}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>

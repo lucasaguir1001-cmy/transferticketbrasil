@@ -1,25 +1,48 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { AuthPage } from "@/components/auth-page";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
-  beforeLoad: async ({ location }) => {
-    // No servidor (SSR), o token de autenticação está no localStorage do navegador e não chega nos headers da requisição inicial de página.
-    // Portanto, a validação de sessão ocorre no cliente para incluir as rotas no manifesto SSR e evitar 404 durante a hidratação.
-    if (typeof window === "undefined") {
-      return {};
-    }
-
-    // Revalida o JWT com o servidor de auth (não confia só no cache local).
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) {
-      // Sessão inválida/expirada — limpa qualquer resíduo e manda pro login.
-      await supabase.auth.signOut().catch(() => {});
-      throw redirect({
-        to: "/login",
-        search: { redirect: location.href },
-      });
-    }
-    return { user: data.user };
-  },
-  component: () => <Outlet />,
+  component: AuthenticatedLayout,
 });
+
+function AuthenticatedLayout() {
+  const [checking, setChecking] = useState(true);
+  const [user, setUser] = useState<unknown | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!mounted) return;
+      setUser(data?.user ?? null);
+      setChecking(false);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUser(session?.user ?? null);
+      setChecking(false);
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-brand" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage defaultRedirect="/admin" />;
+  }
+
+  return <Outlet />;
+}

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useSuspenseQuery, useMutation, useQueryClient, queryOptions } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, queryOptions } from "@tanstack/react-query";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ShieldCheck, RefreshCw, Search, ChevronLeft, ChevronRight, CalendarDays, Building2, Receipt, Wallet, Plus, Pencil, Trash2, Ticket, X, Eye } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
@@ -26,40 +26,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
     { name: "robots", content: "noindex,nofollow" },
   ] }),
-  loader: ({ context }) => {
-    if (typeof window === "undefined") return null;
-    return context.queryClient.ensureQueryData(ownerQuery);
-  },
   component: AdminDashboard,
-  errorComponent: ({ reset }) => (
-    <>
-      <SiteHeader />
-      <main className="container mx-auto max-w-lg px-4 py-16 text-center">
-        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-destructive/10 text-destructive">
-          <ShieldCheck className="h-8 w-8" />
-        </div>
-        <h1 className="text-2xl font-bold">Administração</h1>
-        <p className="my-4 text-muted-foreground">
-          Acesso restrito. Esta conta não possui o privilégio de administrador ("admin") registrado no banco de dados.
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={reset} variant="default">
-            Tentar novamente
-          </Button>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              const { supabase } = await import("@/integrations/supabase/client");
-              await supabase.auth.signOut();
-              window.location.href = "/auth";
-            }}
-          >
-            Trocar de conta
-          </Button>
-        </div>
-      </main>
-    </>
-  ),
 });
 
 type OwnerData = Awaited<ReturnType<typeof getOwnerDashboard>>;
@@ -90,12 +57,56 @@ function FormDialog({ open, onOpenChange, title, description, children, onSubmit
 }
 
 function AdminDashboard() {
-  const { data } = useSuspenseQuery(ownerQuery);
+  const { data, isLoading, error, refetch } = useQuery(ownerQuery);
   const queryClient = useQueryClient();
   const refresh = async () => queryClient.invalidateQueries({ queryKey: ownerQuery.queryKey });
   const saveEventFn = useServerFn(saveOwnerEvent), deleteEventFn = useServerFn(deleteOwnerEvent);
   const saveOrganizerFn = useServerFn(saveOwnerOrganizer), deleteOrganizerFn = useServerFn(deleteOwnerOrganizer);
   const saveOrderFn = useServerFn(saveOwnerOrder), deleteOrderFn = useServerFn(deleteOwnerOrder);
+
+  if (isLoading || !data) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <div className="flex h-96 flex-col items-center justify-center gap-3">
+          <RefreshCw className="h-8 w-8 animate-spin text-brand" />
+          <p className="text-sm text-muted-foreground">Carregando painel administrativo...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <main className="container mx-auto max-w-lg px-4 py-16 text-center">
+          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+            <ShieldCheck className="h-8 w-8" />
+          </div>
+          <h1 className="text-2xl font-bold">Administração</h1>
+          <p className="my-4 text-muted-foreground">
+            Acesso restrito. Esta conta não possui o privilégio de administrador ("admin") registrado no banco de dados.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button onClick={() => void refetch()} variant="default">
+              Tentar novamente
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                const { supabase } = await import("@/integrations/supabase/client");
+                await supabase.auth.signOut();
+                window.location.href = "/login";
+              }}
+            >
+              Trocar de conta
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
   const success = async (message: string) => { await refresh(); toast.success(message); };
   const failed = (error: unknown) => toast.error(errorMessage(error));
   const eventSave = useMutation({ mutationFn: (value: Parameters<typeof saveEventFn>[0]["data"]) => saveEventFn({ data: value }), onSuccess: () => { setEventForm(null); void success("Anúncio salvo."); }, onError: failed });
